@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+scans/
+test_*/
+image examples/
+PaperStream Capture Images/
