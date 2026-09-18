@@ -6,13 +6,16 @@ document scanner directly over the network, without any vendor driver or
 Windows software.
 
 IMPORTANT: in its default configuration, this tool is set up to batch-scan
-trading cards (e.g. Magic: The Gathering) fed sideways through the ADF under
-the scanner's built-in "Horizontal Trading Cards" profile -- card-sized scan
-area, orientation correction, deskew, auto-crop to card edges, and brightness
-correction are all tuned for that use case out of the box. It can scan other
-paper sizes/documents too (see the --width/--height/--no-crop/--no-color-correct
-examples below), but you'll want to adjust those defaults for anything that
-isn't a trading card.
+trading cards (e.g. Magic: The Gathering) fed sideways through the ADF --
+card-sized scan area, orientation correction, deskew, auto-crop to card
+edges, and brightness correction are all tuned for that use case out of the
+box. This is a fixed set of parameters this tool sends directly over the
+network protocol (see "How it works" below); it doesn't depend on any
+profile configured in PaperStream Capture or on the scanner itself -- it'll
+work the same whether or not PaperStream is even installed. It can scan
+other paper sizes/documents too (see the --width/--height/--no-crop/
+--no-color-correct examples below), but you'll want to adjust those
+defaults for anything that isn't a trading card.
 
 The fi-8170 does not speak any standard network scanning protocol (no
 eSCL/AirScan, no WSD). It uses a proprietary JSON-over-HTTP protocol derived
@@ -71,9 +74,11 @@ Command-line flags
 --width UNITS
 --height UNITS
     Scan area size, in 1/1200 inch units (i.e. multiply inches by 1200).
-    The defaults (5760 x 4576 = 4.8" x 3.81") match the scanner's built-in
-    "Horizontal Trading Cards" driver profile, sized for scanning
-    trading cards fed sideways through the ADF.
+    The defaults (5760 x 4576 = 4.8" x 3.81") are sized for scanning
+    trading cards fed sideways through the ADF (values originally sourced
+    from a custom "Horizontal Trading Cards" driver profile on the Windows
+    side during development, but sent here as plain literal numbers over
+    the network protocol -- no such profile needs to exist for this to work).
     Defaults: --width 5760 --height 4576
 
 --jpeg-quality N

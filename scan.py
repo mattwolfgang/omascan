@@ -74,9 +74,9 @@ def main() -> int:
         else:
             picture = Image.open(io.BytesIO(image.data))
             if not args.no_rotate:
-                # The card feeds through the ADF sideways ("Horizontal Trading Cards"
-                # profile); the scanner has no rotation setting of its own, so correct
-                # for it client-side the same way PaperStream does downstream. The
+                # The card feeds through the ADF sideways (this tool's default scan
+                # dimensions are sized for that); the scanner has no rotation setting
+                # of its own, so correct for it client-side. The
                 # duplex back sensor is mounted opposite the front one along the feed
                 # path, so its raw image is 180 degrees off from the front's -- rotate
                 # the other way to compensate, instead of upside down.
