@@ -5,6 +5,15 @@ A Linux command-line tool for driving a Ricoh/Fujitsu fi-8170 high-speed
 document scanner directly over the network, without any vendor driver or
 Windows software.
 
+IMPORTANT: in its default configuration, this tool is set up to batch-scan
+trading cards (e.g. Magic: The Gathering) fed sideways through the ADF under
+the scanner's built-in "Horizontal Trading Cards" profile -- card-sized scan
+area, orientation correction, deskew, auto-crop to card edges, and brightness
+correction are all tuned for that use case out of the box. It can scan other
+paper sizes/documents too (see the --width/--height/--no-crop/--no-color-correct
+examples below), but you'll want to adjust those defaults for anything that
+isn't a trading card.
+
 The fi-8170 does not speak any standard network scanning protocol (no
 eSCL/AirScan, no WSD). It uses a proprietary JSON-over-HTTP protocol derived
 from Google's old "Privet" local-device protocol, reverse-engineered from a
