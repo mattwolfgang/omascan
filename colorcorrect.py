@@ -2,11 +2,9 @@
 
 The raw JPEGs from the scanner come back noticeably dark compared to
 PaperStream Capture's real output. Calibrated using the best possible ground
-truth: Matt ran the exact same physical batch of cards through PaperStream
-Capture directly and provided the real output files (see "PaperStream
-Capture Images/" if still present), so both front and back of several cards
-could be compared pixel-mean-for-pixel-mean against our own raw scan of the
-literal same card. An earlier pass used a weaker proxy (a different
+truth: the exact same physical batch of cards was run through PaperStream
+Capture directly, so both front and back of several cards could be compared
+pixel-mean-for-pixel-mean against our own raw scan of the literal same card. An earlier pass used a weaker proxy (a different
 PaperStream session's output of the universal Magic card back art, which is
 identical across nearly every card) before this direct same-batch data was
 available -- that gave a noticeably brighter target than PaperStream
@@ -67,3 +65,23 @@ def white_balance(
     for c in range(3):
         out[:, :, c] = 1.0 - np.exp(-strengths[c] * arr[:, :, c])
     return Image.fromarray(np.clip(out * 255.0, 0, 255).astype(np.uint8), mode="RGB")
+
+
+def adjust_tone(image: Image.Image, gamma: float = 1.0, contrast: float = 1.0) -> Image.Image:
+    """Optional user-facing tone tweaks applied after the brightness curve.
+
+    gamma > 1 brightens midtones (out = in^(1/gamma)); contrast scales around
+    mid-gray (out = (in - 0.5) * contrast + 0.5). Both default to 1.0, which is
+    a no-op -- the trading-card preset relies on white_balance() alone, since
+    gamma near black amplifies border texture into pixelation (see above).
+    """
+    if gamma == 1.0 and contrast == 1.0:
+        return image
+    x = np.arange(256, dtype=np.float64) / 255.0
+    if gamma != 1.0:
+        x = np.power(x, 1.0 / gamma)
+    if contrast != 1.0:
+        x = (x - 0.5) * contrast + 0.5
+    lut = np.clip(np.round(x * 255.0), 0, 255).astype(np.uint8).tolist()
+    image = image.convert("RGB")
+    return image.point(lut * 3)

@@ -4,3 +4,4 @@ scans/
 test_*/
 image examples/
 PaperStream Capture Images/
+.venv/

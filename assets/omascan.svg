@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="#1b1d23"/>
+  <!-- paper in the feeder -->
+  <path d="M84 34h72l24 24v70H84z" fill="#f4f1ea"/>
+  <path d="M156 34v24h24z" fill="#cfc9bd"/>
+  <rect x="100" y="66" width="56" height="7" rx="3.5" fill="#9aa0ab"/>
+  <rect x="100" y="82" width="64" height="7" rx="3.5" fill="#9aa0ab"/>
+  <rect x="100" y="98" width="44" height="7" rx="3.5" fill="#9aa0ab"/>
+  <!-- scanner body -->
+  <rect x="40" y="118" width="176" height="74" rx="18" fill="#3a3f4b"/>
+  <rect x="40" y="118" width="176" height="22" rx="11" fill="#4a5060"/>
+  <!-- scan line -->
+  <rect x="58" y="150" width="140" height="10" rx="5" fill="#7dd3fc"/>
+  <rect x="58" y="150" width="140" height="10" rx="5" fill="#7dd3fc" opacity="0.35" transform="translate(0 6) scale(1 1.1)"/>
+  <!-- output tray -->
+  <path d="M60 192h136l14 26H46z" fill="#2b2f38"/>
+  <circle cx="192" cy="171" r="6" fill="#86efac"/>
+</svg>

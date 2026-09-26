@@ -1,7 +1,7 @@
 """Content-based crop for scanned trading cards.
 
 PaperStream Capture's own output (confirmed by comparing real finished scans
-in /var/mnt/Data/scans/TCGP7/ against our raw device output) is NOT a fixed-size
+against our raw device output) is NOT a fixed-size
 or fixed-position crop -- output dimensions vary card-to-card (~786-795 x
 1085-1091px at 300dpi for a nominal 2.5x3.5in card), meaning it's doing real
 per-scan edge detection against the background, not applying a static rectangle.
@@ -30,7 +30,7 @@ def detect_card_bbox(
     the raw dark-pixel bounding box consistently undershoots real PaperStream
     output more on the vertical axis than the horizontal one -- likely due to
     anti-aliased/lighter border pixels right at the card's top and bottom edges
-    -- tuned empirically against real finished scans in /var/mnt/Data/scans/.
+    -- tuned empirically against real finished PaperStream scans.
     """
     gray = np.asarray(image.convert("L"))
     dark = gray < dark_threshold
