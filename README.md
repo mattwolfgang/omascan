@@ -266,3 +266,7 @@ Tested with the fi-8170. Other fi-series models that use the same network
 protocol may work but haven't been tried. The trading-card preset was
 calibrated against real PaperStream output; the document presets are new and
 may need brightness tweaks for your paper.
+
+## License
+
+[MIT](LICENSE)
