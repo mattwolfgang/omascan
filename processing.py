@@ -15,6 +15,7 @@ from colorcorrect import DEFAULT_BLUR_RADIUS, DEFAULT_STRENGTHS, adjust_tone, wh
 from privet_client import ScannedImage
 
 UNITS_PER_INCH = 1200  # the scanner's width/height unit is 1/1200 inch
+MM_PER_INCH = 25.4
 
 # Rotation choices -> degrees counter-clockwise (PIL's convention) for the front
 # side. The back side is turned the same amount in the opposite direction:
@@ -36,8 +37,11 @@ class ScanSettings:
     deskew: bool = True
     crop: bool = True
     crop_threshold: int = 80
-    crop_margin_x: int = 11
-    crop_margin_y: int = 22
+    # Margins kept around the detected card edges, in mm (converted to pixels at
+    # the scan's resolution). 0.93/1.86 mm are exactly 11/22 px at 300 dpi, the
+    # values tuned against real PaperStream output.
+    crop_margin_x_mm: float = 0.93
+    crop_margin_y_mm: float = 1.86
     color_correct: bool = True
     strengths: tuple[float, float, float] = DEFAULT_STRENGTHS
     blur: float = DEFAULT_BLUR_RADIUS
@@ -58,6 +62,11 @@ class ScanSettings:
             kwargs["rotation"] = "cw90" if data["rotate"] else "none"
         if kwargs.get("rotation", "cw90") not in ROTATIONS:
             raise ValueError(f"Unknown rotation {kwargs['rotation']!r}")
+        # Presets saved before margins were in mm stored pixels at the preset's resolution.
+        dpi = data.get("resolution") or cls.resolution
+        for axis in ("x", "y"):
+            if f"crop_margin_{axis}_mm" not in kwargs and f"crop_margin_{axis}" in data:
+                kwargs[f"crop_margin_{axis}_mm"] = round(data[f"crop_margin_{axis}"] / dpi * MM_PER_INCH, 2)
         if "strengths" in kwargs:
             kwargs["strengths"] = tuple(float(s) for s in kwargs["strengths"])
         return cls(**kwargs)
@@ -66,6 +75,10 @@ class ScanSettings:
     def is_passthrough(self) -> bool:
         return (self.rotation == "none" and not self.deskew and not self.crop and not self.color_correct
                 and self.gamma == 1.0 and self.contrast == 1.0)
+
+
+def mm_to_px(mm: float, dpi: int) -> int:
+    return round(mm / MM_PER_INCH * dpi)
 
 
 def process_image(image: ScannedImage, settings: ScanSettings) -> Image.Image:
@@ -96,8 +109,8 @@ def process_image(image: ScannedImage, settings: ScanSettings) -> Image.Image:
         picture = auto_crop(
             picture,
             dark_threshold=settings.crop_threshold,
-            margin_x=settings.crop_margin_x,
-            margin_y=settings.crop_margin_y,
+            margin_x=mm_to_px(settings.crop_margin_x_mm, image.resolution or settings.resolution),
+            margin_y=mm_to_px(settings.crop_margin_y_mm, image.resolution or settings.resolution),
         )
     if settings.color_correct:
         # No brightness/contrast/gamma TWAIN capability was found to differ

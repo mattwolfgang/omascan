@@ -49,10 +49,10 @@ def build_parser(presets: list[str]) -> argparse.ArgumentParser:
     parser.add_argument("--crop-threshold", type=int,
                         help="Grayscale darkness threshold (0-255) used to detect the card's border "
                              "against the background. Lower = stricter/darker required.")
-    parser.add_argument("--crop-margin-x", type=int,
-                        help="Horizontal pixels of margin to keep around the detected card edges.")
-    parser.add_argument("--crop-margin-y", type=int,
-                        help="Vertical pixels of margin to keep around the detected card edges.")
+    parser.add_argument("--crop-margin-x", type=float, metavar="MM",
+                        help="Horizontal margin (mm) to keep around the detected card edges.")
+    parser.add_argument("--crop-margin-y", type=float, metavar="MM",
+                        help="Vertical margin (mm) to keep around the detected card edges.")
     parser.add_argument("--color-correct", action=argparse.BooleanOptionalAction,
                         help="Brightness correction (--no-color-correct saves the scanner's raw dark output)")
     parser.add_argument("--color-strength", type=float, nargs=3, metavar=("R", "G", "B"),
@@ -77,8 +77,8 @@ def settings_from_args(base: ScanSettings, args: argparse.Namespace) -> ScanSett
         "crop": args.crop,
         "deskew": args.deskew,
         "crop_threshold": args.crop_threshold,
-        "crop_margin_x": args.crop_margin_x,
-        "crop_margin_y": args.crop_margin_y,
+        "crop_margin_x_mm": args.crop_margin_x,
+        "crop_margin_y_mm": args.crop_margin_y,
         "color_correct": args.color_correct,
         "strengths": tuple(args.color_strength) if args.color_strength else None,
         "blur": args.color_blur,

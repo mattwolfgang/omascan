@@ -2,14 +2,11 @@
 
 ```
                 ▄▄▄
- ▄█████▄   ▄███████████▄    ▄███████   ▄███████   ▄███████    ▄███████  ███▄▄▄▄
-███   ███ ███   ███   ███  ███   ███  ███   ███  ███   ███   ███   ███  ███▀▀▀██▄
-███   ███ ███   ███   ███  ███   ███  ███   █▀   ███   █▀    ███   ███  ███   ███
-███   ███ ███   ███   ███ ▄███▄▄▄███  ▀███▄▄▄▄   ███        ▄███▄▄▄███  ███   ███
-███   ███ ███   ███   ███ ▀███▀▀▀███    ▀▀▀▀███▄ ███        ▀███▀▀▀███  ███   ███
-███   ███ ███   ███   ███  ███   ███   ▄█   ███  ███   █▄    ███   ███  ███   ███
-███   ███ ███   ███   ███  ███   ███  ███   ███  ███   ███   ███   ███  ███   ███
- ▀█████▀   ▀█   ███   █▀   ███   █▀    ▀██████▀  ███████▀    ███   █▀    ▀█   █▀
+ ▄█████▄   ▄███████████▄    ▄███████  ▄████████  ▄███████    ▄███████ ███▄▄▄▄
+███   ███ ███   ███   ███  ███   ███ ███▄▄▄▄    ███   █▀    ███   ███ ███▀▀▀██▄
+███   ███ ███   ███   ███ ▄███▄▄▄███  ▀▀▀▀▀███▄ ███        ▄███▄▄▄███ ███   ███
+███   ███ ███   ███   ███ ▀███▀▀▀███ ▄█    ███  ███   █▄   ▀███▀▀▀███ ███   ███
+ ▀█████▀   ▀█   ███   █▀   ███   █▀  ▀██████▀    ▀██████▀   ███   █▀   ▀█   █▀
 ```
 
 # Omascan
@@ -23,8 +20,9 @@ scanner over the network. No vendor driver, no Windows, no PaperStream.
 - **Presets** for Letter, Legal, A4 and trading cards (e.g. Magic: The
   Gathering, fed sideways and auto-cropped/straightened), plus your own.
 - Remembers your scanner, save folder and last preset between sessions.
-- Built for [Omarchy](https://omarchy.org) (adds itself to the app launcher and
-  the Omarchy menu), but runs on any Linux with Python 3.10+.
+- Built for [Omarchy](https://omarchy.org): matches your Omarchy theme (and
+  follows along live when you switch themes), and adds itself to the app
+  launcher and the Omarchy menu. Runs on any Linux with Python 3.10+.
 - A command-line mode (`omascan scan`) for scripting.
 
 The fi-8170 doesn't speak any standard network scanning protocol (no
@@ -111,7 +109,7 @@ presets in `~/.config/omascan/config.json`.
 | Deskew | Straightens slightly crooked cards, detected from the card's dark border. |
 | Auto-crop | Crops to the card's detected edges. |
 | Crop threshold | How dark (0-255) a pixel must be to count as card border. Raise it if a card's border isn't detected. |
-| Crop margin X / Y | Extra pixels kept around the detected card edges. |
+| Margin X / Y (mm) | Extra space kept around the detected card edges, in millimeters. |
 | Brightness + R G B | Brightness correction; the scanner's raw output is dark. Higher numbers are brighter, per color channel. |
 | Pre-blur | Slight blur before brightening, to stop fine texture turning into speckles. 0 turns it off. |
 | Gamma / Contrast | Optional extra tone adjustments. 1.0 is off. Gamma above 1 brightens midtones. |
@@ -179,8 +177,8 @@ Options left out take their value from the preset.
   Crop each image to the card using content-based edge detection (finding the card's dark border against the background). The scanner itself returns a full, overscanned frame with no crop of its own (confirmed at the protocol level: `automaticDeskew` and `cropMargin` are disabled in the scan task, and the image metadata's `requestDriverCropDeskew` field reports "failure"). The crop is tuned to match PaperStream's real output, whose dimensions vary slightly card-to-card because it's genuine per-card detection rather than a fixed rectangle.
 - **`--crop-threshold N`**<br>
   Grayscale darkness threshold (0-255) used to detect the card's border. Lower = only very dark (e.g. black-bordered) edges count. Trading cards: 80.
-- **`--crop-margin-x N`, `--crop-margin-y N`**<br>
-  Extra pixels of margin kept around the detected card edges. The vertical margin is larger because the dark-pixel edge detection consistently undershoots more on that axis (likely anti-aliased/lighter pixels right at the card's top and bottom edges). Trading cards: 11 and 22.
+- **`--crop-margin-x MM`, `--crop-margin-y MM`**<br>
+  Extra margin, in millimeters, kept around the detected card edges (converted to pixels at the scan resolution). The vertical margin is larger because the dark-pixel edge detection consistently undershoots more on that axis (likely anti-aliased/lighter pixels right at the card's top and bottom edges). Trading cards: 0.93 and 1.86 mm (11 and 22 pixels at 300 dpi).
 - **`--deskew` / `--no-deskew`**<br>
   Cards feed slightly crooked (typically well under a couple of degrees, but visible). Deskew detects the card's rotation angle from its border (OpenCV `minAreaRect`) and straightens it before cropping.
 - **`--color-correct` / `--no-color-correct`**<br>
@@ -207,6 +205,7 @@ Options left out take their value from the preset.
 | `config.py` | Settings and preset storage, built-in presets |
 | `discovery.py` | Finds fi-series scanners on the local network |
 | `logo.py` | The title banner |
+| `omarchy_theme.py` | Builds the TUI's color theme from the current Omarchy theme |
 | `install.sh`, `uninstall.sh`, `scripts/` | Installer and Omarchy menu integration |
 
 ### The protocol
