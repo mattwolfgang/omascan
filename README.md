@@ -32,6 +32,18 @@ a packet capture of the vendor's software. See [How it works](#how-it-works).
 
 ## Install
 
+### Omarchy / Arch Linux (AUR)
+
+```bash
+yay -S omascan
+omascan menu add    # optional: add Omascan to the Omarchy menu
+```
+
+Updates arrive with your normal system updates (`yay`). To remove it, run
+`omascan menu remove` (if you added the menu row), then `yay -R omascan`.
+
+### Any Linux (install script)
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mattwolfgang/omascan/main/install.sh | bash
 ```
@@ -62,6 +74,10 @@ over plain HTTP (port 80).
 **Update:** run the install command again.
 **Uninstall:** `omascan uninstall` (add `--purge` to also delete your settings
 and presets). Scanned images are never touched.
+
+Use one install method, not both: the script's `~/.local/bin/omascan` takes
+priority over the package's `/usr/bin/omascan`. To switch from the script to
+the AUR package, run `omascan uninstall` first (your settings are kept).
 
 ## Using Omascan
 
@@ -207,6 +223,7 @@ Options left out take their value from the preset.
 | `logo.py` | The title banner |
 | `omarchy_theme.py` | Builds the TUI's color theme from the current Omarchy theme |
 | `install.sh`, `uninstall.sh`, `scripts/` | Installer and Omarchy menu integration |
+| `packaging/` | Arch package files (launcher, desktop entry, PKGBUILD) |
 
 ### The protocol
 

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Omascan
+Comment=Scan documents and cards with the Ricoh/Fujitsu fi-8170
+Exec=omascan-launch
+Terminal=false
+Icon=omascan
+Categories=Graphics;Scanning;
+Keywords=scanner;scan;fi-8170;fujitsu;ricoh;
+StartupNotify=true

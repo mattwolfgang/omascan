@@ -1,0 +1,33 @@
+#!/bin/sh
+# Omascan launcher for system-wide (package) installs.
+APP=/usr/share/omascan
+
+case "${1:-}" in
+  scan)
+    shift
+    exec python3 "$APP/scan.py" "$@"
+    ;;
+  menu)
+    # The Omarchy menu is configured per user, so a package can't add itself.
+    case "${2:-}" in
+      add) python3 "$APP/scripts/omarchy_menu_entry.py" add "omarchy-launch-or-focus-tui omascan" || exit 1 ;;
+      remove) python3 "$APP/scripts/omarchy_menu_entry.py" remove || exit 1 ;;
+      *) echo "Usage: omascan menu add|remove" >&2; exit 2 ;;
+    esac
+    command -v omarchy-menu >/dev/null 2>&1 && omarchy-menu refresh >/dev/null 2>&1
+    echo "Omarchy menu updated."
+    exit 0
+    ;;
+  --version|version)
+    cat "$APP/VERSION"
+    exit 0
+    ;;
+  -h|--help|help)
+    echo "Usage: omascan                   launch the Omascan TUI"
+    echo "       omascan scan [...]        command-line scan (omascan scan --help)"
+    echo "       omascan menu add|remove   add/remove Omascan in the Omarchy menu"
+    echo "       omascan --version"
+    exit 0
+    ;;
+esac
+exec python3 "$APP/omascan.py" "$@"

@@ -1,0 +1,10 @@
+#!/bin/sh
+# Opens Omascan in a terminal window from the app launcher. On Omarchy this uses
+# Omarchy's styled TUI window (and focuses it if Omascan is already open).
+if command -v omarchy-launch-or-focus-tui >/dev/null 2>&1; then
+  exec omarchy-launch-or-focus-tui omascan
+elif command -v xdg-terminal-exec >/dev/null 2>&1; then
+  exec xdg-terminal-exec omascan
+else
+  exec "${TERMINAL:-xterm}" -e omascan
+fi
