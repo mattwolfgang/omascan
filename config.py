@@ -57,6 +57,7 @@ class AppConfig:
     save_path: str = DEFAULT_SAVE_PATH
     last_preset: str = DEFAULT_PRESET_NAME
     user_presets: dict[str, ScanSettings] = field(default_factory=dict)
+    check_for_updates: bool = True
 
     @property
     def presets(self) -> dict[str, ScanSettings]:
@@ -82,6 +83,7 @@ class AppConfig:
             save_path=data.get("save_path", DEFAULT_SAVE_PATH),
             last_preset=data.get("last_preset", DEFAULT_PRESET_NAME),
             user_presets=presets,
+            check_for_updates=bool(data.get("check_for_updates", True)),
         )
 
     def save(self) -> None:
@@ -92,6 +94,7 @@ class AppConfig:
             "save_path": self.save_path,
             "last_preset": self.last_preset,
             "presets": {name: s.to_dict() for name, s in self.user_presets.items()},
+            "check_for_updates": self.check_for_updates,
         }
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=2) + "\n")

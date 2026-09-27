@@ -1,0 +1,59 @@
+# Builds the Arch package and attaches it to each GitHub release, so
+# `omascan update` and the installer can fetch it.
+name: Arch package
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and attach (e.g. v0.3.0)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Install build tools
+        run: pacman -Syu --noconfirm --needed git github-cli python
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Build package
+        run: |
+          VER="${TAG#v}"
+          if [ "$(cat VERSION)" != "$VER" ]; then
+            echo "::error::VERSION file says $(cat VERSION) but the release tag is $TAG"
+            exit 1
+          fi
+          git config --global --add safe.directory "$PWD"
+          mkdir -p /tmp/build
+          git archive --prefix="omascan-$VER/" -o "/tmp/build/omascan-$VER.tar.gz" HEAD
+          # Build from this checkout: the PKGBUILD's download is satisfied by the
+          # local tarball, and its checksum is ours, so it's skipped here.
+          sed -e "s/^pkgver=.*/pkgver=$VER/" -e "s/^pkgrel=.*/pkgrel=1/" \
+              -e "s/^sha256sums=.*/sha256sums=('SKIP')/" packaging/aur/PKGBUILD > /tmp/build/PKGBUILD
+          cp packaging/aur/omascan.install /tmp/build/
+          useradd -m builder
+          chown -R builder /tmp/build
+          su builder -c "cd /tmp/build && makepkg --nodeps --noconfirm"
+          cd /tmp/build
+          cp "omascan-$VER-1-any.pkg.tar.zst" omascan-any.pkg.tar.zst
+          sha256sum "omascan-$VER-1-any.pkg.tar.zst" omascan-any.pkg.tar.zst > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd /tmp/build
+          gh release upload "$TAG" omascan-*.pkg.tar.zst SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"

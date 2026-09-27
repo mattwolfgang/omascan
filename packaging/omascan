@@ -7,6 +7,10 @@ case "${1:-}" in
     shift
     exec python3 "$APP/scan.py" "$@"
     ;;
+  update)
+    shift
+    exec python3 "$APP/updater.py" "$@"
+    ;;
   menu)
     # The Omarchy menu is configured per user, so a package can't add itself.
     case "${2:-}" in
@@ -25,6 +29,7 @@ case "${1:-}" in
   -h|--help|help)
     echo "Usage: omascan                   launch the Omascan TUI"
     echo "       omascan scan [...]        command-line scan (omascan scan --help)"
+    echo "       omascan update            install the latest release (--check to only check)"
     echo "       omascan menu add|remove   add/remove Omascan in the Omarchy menu"
     echo "       omascan --version"
     exit 0

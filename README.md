@@ -32,7 +32,49 @@ a packet capture of the vendor's software. See [How it works](#how-it-works).
 
 ## Install
 
-### Omarchy / Arch Linux (package)
+```bash
+curl -fsSL https://raw.githubusercontent.com/mattwolfgang/omascan/main/install.sh | bash
+```
+
+That's it. Then run `omascan`, or open it from the app launcher (**Super +
+Space** on Omarchy) or the Omarchy menu.
+
+**Update:** `omascan update`. Omascan also tells you when a new version is
+out.
+
+What the installer does:
+
+- **On Omarchy / Arch Linux** it installs the latest release's pacman package
+  (after checking its checksum), so the dependencies come from the official Arch
+  repos. It asks for your password for that step. On Omarchy it also adds an
+  **Omascan** row to the Omarchy menu.
+- **On other Linux distributions** it installs Omascan into
+  `~/.local/share/omascan` with a private Python environment (nothing is
+  installed system-wide), and adds the `omascan` command to `~/.local/bin`
+  (adding that folder to your `PATH` if needed) and an app-launcher entry.
+  This needs Python 3.10 or newer with the `venv` module (on Debian/Ubuntu,
+  `sudo apt install python3-venv`).
+
+Omascan needs the scanner reachable on your network over plain HTTP (port 80).
+
+**Uninstall:**
+
+- Arch package: `omascan menu remove` (if the Omarchy menu row was added),
+  then `sudo pacman -R omascan`.
+- Otherwise: `omascan uninstall` (add `--purge` to also delete your settings
+  and presets).
+
+Your settings are kept unless you purge them, and scanned images are never
+touched.
+
+<details>
+<summary><b>Other ways to install</b></summary>
+
+**From a clone** (e.g. to try changes): `./install.sh` installs that copy of
+the code into `~/.local/share/omascan`, on any distribution.
+
+**The Arch package by hand:** every release has `omascan-any.pkg.tar.zst`
+attached (with `SHA256SUMS`):
 
 ```bash
 curl -fLO https://github.com/mattwolfgang/omascan/releases/latest/download/omascan-any.pkg.tar.zst
@@ -40,48 +82,14 @@ sudo pacman -U omascan-any.pkg.tar.zst
 omascan menu add    # optional: add Omascan to the Omarchy menu
 ```
 
-pacman installs the dependencies from the official Arch repos. The package
-isn't signed, which is why it's downloaded first rather than installed straight
-from the URL. To update, repeat the first two commands with the newest release.
-To remove it, run `omascan menu remove` (if you added the menu row), then
-`sudo pacman -R omascan`.
+The package isn't signed, which is why it's downloaded first rather than
+installed straight from the URL.
 
-### Any Linux (install script)
+**Choosing the method:** set `OMASCAN_METHOD=package` or `OMASCAN_METHOD=script`
+before running the install command to override the automatic choice, and
+`OMASCAN_REF=v0.3.0` to install a specific release.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/mattwolfgang/omascan/main/install.sh | bash
-```
-
-Or from a clone:
-
-```bash
-git clone https://github.com/mattwolfgang/omascan.git
-cd omascan
-./install.sh
-```
-
-The installer:
-
-- copies Omascan to `~/.local/share/omascan` and creates a private Python
-  environment there with its dependencies (requests, Pillow, numpy,
-  opencv-python-headless, textual), so nothing is installed system-wide;
-- adds the `omascan` command to `~/.local/bin` (and adds that folder to your
-  `PATH` in `~/.bashrc`/`~/.zshrc` if it isn't already);
-- adds Omascan to the app launcher (**Super + Space** on Omarchy);
-- on Omarchy, adds an **Omascan** row to the Omarchy menu
-  (`~/.config/omarchy/extensions/omarchy-menu.jsonc`).
-
-Requirements: Python 3.10 or newer with the `venv` module (on Debian/Ubuntu,
-`sudo apt install python3-venv`), and the scanner reachable on your network
-over plain HTTP (port 80).
-
-**Update:** run the install command again.
-**Uninstall:** `omascan uninstall` (add `--purge` to also delete your settings
-and presets). Scanned images are never touched.
-
-Use one install method, not both: the script's `~/.local/bin/omascan` takes
-priority over the package's `/usr/bin/omascan`. To switch from the script to
-the AUR package, run `omascan uninstall` first (your settings are kept).
+</details>
 
 ## Using Omascan
 
@@ -116,7 +124,9 @@ already has sheets continues the numbering instead of overwriting, so you can
 feed a big batch in several loads.
 
 Omascan remembers the scanner address, save path, last-used preset and your
-presets in `~/.config/omascan/config.json`.
+presets in `~/.config/omascan/config.json`. At startup it also checks GitHub for
+a newer release (set `"check_for_updates": false` in that file to turn this
+off).
 
 ### Settings
 
@@ -228,6 +238,8 @@ Options left out take their value from the preset.
 | `omarchy_theme.py` | Builds the TUI's color theme from the current Omarchy theme |
 | `install.sh`, `uninstall.sh`, `scripts/` | Installer and Omarchy menu integration |
 | `packaging/` | Arch package files (launcher, desktop entry, PKGBUILD) |
+| `updater.py` | `omascan update` and the update check |
+| `.github/workflows/package.yml` | Builds the Arch package for each release |
 
 ### The protocol
 
@@ -286,6 +298,16 @@ Tested with the fi-8170. Other fi-series models that use the same network
 protocol may work but haven't been tried. The trading-card preset was
 calibrated against real PaperStream output; the document presets are new and
 may need brightness tweaks for your paper.
+
+## Making a release
+
+1. Update `VERSION` (e.g. `0.3.0`) and commit.
+2. Publish a GitHub release tagged to match (`v0.3.0`), e.g.
+   `gh release create v0.3.0 --title "Omascan v0.3.0" --notes "…"`.
+3. The **Arch package** workflow builds the package and attaches it to the
+   release, with `SHA256SUMS`. It fails if `VERSION` doesn't match the tag.
+
+`omascan update` and the installer pick up the new release from there.
 
 ## License
 

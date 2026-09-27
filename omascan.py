@@ -36,6 +36,7 @@ from textual.worker import get_current_worker
 from config import BUILTIN_PRESETS, DEFAULT_PRESET_NAME, TCG_PRESET_NAME, AppConfig, config_path
 from logo import BANNER, BANNER_WIDTH
 from omarchy_theme import build_theme, theme_name, theme_stamp
+from updater import available_update
 from discovery import FoundScanner, find_scanners, local_networks
 from privet_client import PrivetClient
 from processing import ROTATION_LABELS, UNITS_PER_INCH, ScanSettings, next_sheet_offset, save_image
@@ -319,6 +320,22 @@ class ScanApp(App):
         if not self.config.host:
             # First run: nothing remembered yet, so go looking for the scanner.
             self.action_find_scanner()
+        if self.config.check_for_updates:
+            self.check_for_update()
+
+    @work(thread=True, exclusive=True, group="update-check")
+    def check_for_update(self) -> None:
+        try:
+            tag = available_update(timeout=5)
+        except Exception:  # noqa: BLE001 - offline etc.; the check is best-effort
+            return
+        if tag:
+            self.call_from_thread(self.show_update_notice, tag.lstrip("v"))
+
+    def show_update_notice(self, version: str) -> None:
+        text = f"Omascan {version} is available. Run 'omascan update' in a terminal to install it."
+        self.notify(text, title="Update available", timeout=15, markup=False)
+        self.log_line("[$accent]$message[/]", message=text)
 
     # ----- Omarchy theme -----
 
