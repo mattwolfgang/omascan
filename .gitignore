@@ -1,7 +1,30 @@
 __pycache__/
 *.pyc
+.venv/
+
+# Scan output and sample images (may contain personal documents)
 scans/
 test_*/
 image examples/
 PaperStream Capture Images/
-.venv/
+*.jpg
+*.jpeg
+*.tif
+*.tiff
+*.pdf
+
+# Packet captures from protocol reverse-engineering (contain LAN addresses, device serials)
+*.pcap
+*.pcapng
+*.har
+
+# Local config / secrets (the app keeps its real config in ~/.config/omascan/)
+config.json
+.env
+.env.*
+
+# Package build output
+packaging/aur/src/
+packaging/aur/pkg/
+*.pkg.tar.*
+*.tar.gz
