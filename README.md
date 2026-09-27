@@ -32,15 +32,19 @@ a packet capture of the vendor's software. See [How it works](#how-it-works).
 
 ## Install
 
-### Omarchy / Arch Linux (AUR)
+### Omarchy / Arch Linux (package)
 
 ```bash
-yay -S omascan
+curl -fLO https://github.com/mattwolfgang/omascan/releases/latest/download/omascan-any.pkg.tar.zst
+sudo pacman -U omascan-any.pkg.tar.zst
 omascan menu add    # optional: add Omascan to the Omarchy menu
 ```
 
-Updates arrive with your normal system updates (`yay`). To remove it, run
-`omascan menu remove` (if you added the menu row), then `yay -R omascan`.
+pacman installs the dependencies from the official Arch repos. The package
+isn't signed, which is why it's downloaded first rather than installed straight
+from the URL. To update, repeat the first two commands with the newest release.
+To remove it, run `omascan menu remove` (if you added the menu row), then
+`sudo pacman -R omascan`.
 
 ### Any Linux (install script)
 
