@@ -9,7 +9,7 @@ license=('MIT')
 depends=('python' 'python-requests' 'python-pillow' 'python-numpy' 'python-opencv' 'python-textual')
 install=omascan.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('866e1cdf6f731321b690e446071488d167080a1c54245c0030a3aa094c9b7346')
 
 package() {
   cd "$pkgname-$pkgver"
