@@ -16,6 +16,9 @@ from privet_client import ScannedImage
 
 UNITS_PER_INCH = 1200  # the scanner's width/height unit is 1/1200 inch
 MM_PER_INCH = 25.4
+# How far past the dark frame line the crop may reach to take in a card's white
+# border. Magic's white border is ~3 mm; the extra leaves room for skew.
+WHITE_BORDER_MAX_MM = 6.0
 
 # Rotation choices -> degrees counter-clockwise (PIL's convention) for the front
 # side. The back side is turned the same amount in the opposite direction:
@@ -106,11 +109,16 @@ def process_image(image: ScannedImage, settings: ScanSettings) -> Image.Image:
         # real output dimensions vary card-to-card (confirmed against actual
         # finished scans), meaning it runs genuine per-card edge detection,
         # not a fixed-size/fixed-position crop -- replicate that here instead.
+        # White-bordered cards have no dark edge, so the crop also reaches out
+        # across any bright border past the dark frame line (see autocrop.py).
+        dpi = image.resolution or settings.resolution
         picture = auto_crop(
             picture,
             dark_threshold=settings.crop_threshold,
-            margin_x=mm_to_px(settings.crop_margin_x_mm, image.resolution or settings.resolution),
-            margin_y=mm_to_px(settings.crop_margin_y_mm, image.resolution or settings.resolution),
+            margin_x=mm_to_px(settings.crop_margin_x_mm, dpi),
+            margin_y=mm_to_px(settings.crop_margin_y_mm, dpi),
+            max_border_x=mm_to_px(WHITE_BORDER_MAX_MM, dpi),
+            max_border_y=mm_to_px(WHITE_BORDER_MAX_MM, dpi),
         )
     if settings.color_correct:
         # No brightness/contrast/gamma TWAIN capability was found to differ
