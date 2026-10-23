@@ -1,6 +1,6 @@
 pkgbase = omascan
 	pkgdesc = Terminal UI for scanning with the Ricoh/Fujitsu fi-8170 over the network, no vendor driver needed
-	pkgver = 0.2.1
+	pkgver = 0.3.1
 	pkgrel = 1
 	url = https://github.com/mattwolfgang/omascan
 	install = omascan.install
@@ -12,7 +12,7 @@ pkgbase = omascan
 	depends = python-numpy
 	depends = python-opencv
 	depends = python-textual
-	source = omascan-0.2.1.tar.gz::https://github.com/mattwolfgang/omascan/archive/refs/tags/v0.2.1.tar.gz
-	sha256sums = 866e1cdf6f731321b690e446071488d167080a1c54245c0030a3aa094c9b7346
+	source = omascan-0.3.1.tar.gz::https://github.com/mattwolfgang/omascan/archive/refs/tags/v0.3.1.tar.gz
+	sha256sums = 430ae507d01b0d451548b4d6e7657d8f77cc5ce9faf8b55f7fd439ce3e668f27
 
 pkgname = omascan
