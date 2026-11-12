@@ -17,6 +17,7 @@ from textual.content import Content
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
+from textual.suggester import Suggester
 from textual.validation import Number
 from textual.widgets import (
     Button,
@@ -66,6 +67,60 @@ def batch_folder_name(name: str) -> str:
     """Make a batch name safe to use as a single folder name."""
     name = re.sub(r"[/\\\x00]", "-", name.strip())
     return "" if name in (".", "..") else name
+
+
+_TRAILING_NUMBER_RE = re.compile(r"^(.*?)(\d+)$")
+
+
+def increment_batch_name(name: str) -> str:
+    """TCGP23 -> TCGP24, box09 -> box10; a name without a trailing number gets a 2."""
+    if m := _TRAILING_NUMBER_RE.match(name):
+        stem, digits = m.groups()
+        return stem + str(int(digits) + 1).zfill(len(digits))
+    return name + "2"
+
+
+def next_free_batch_name(base: Path, name: str) -> str | None:
+    """If `name` is already taken in `base` (as TCGP or TCGP<n>), the name after the
+    highest existing TCGP<n>; None when there's nothing to suggest.
+
+    A plain stem counts as batch 1, so TCGP alone suggests TCGP2. Typing a stem
+    that hasn't been used bare (TCGP when only TCGP23 exists) still suggests the
+    next one; typing a specific unused number (TCGP30) is left alone.
+    """
+    if not name:
+        return None
+    m = _TRAILING_NUMBER_RE.match(name)
+    stem = m.group(1) if m else name
+    if m and not (base / name).is_dir():
+        return None
+    pattern = re.compile(re.escape(stem) + r"(\d*)")
+    best, best_digits = 0, ""
+    try:
+        entries = list(base.iterdir())
+    except OSError:
+        return None
+    for p in entries:
+        if (pm := pattern.fullmatch(p.name)) and p.is_dir():
+            digits = pm.group(1)
+            n = int(digits) if digits else 1
+            if n > best:
+                best, best_digits = n, digits
+    if not best:
+        return None
+    return stem + str(best + 1).zfill(len(best_digits))
+
+
+class BatchSuggester(Suggester):
+    """Inline ghost-text suggestion of the next free batch name (Right arrow accepts)."""
+
+    def __init__(self, app: ScanApp) -> None:
+        super().__init__(use_cache=False, case_sensitive=True)
+        self.scan_app = app
+
+    async def get_suggestion(self, value: str) -> str | None:
+        suggestion = self.scan_app.batch_suggestion(value)
+        return suggestion if suggestion and suggestion.startswith(value) else None
 
 
 class PresetNameScreen(ModalScreen[str | None]):
@@ -229,7 +284,7 @@ class ScanApp(App):
                         yield Button("Browse", id="browse")
                     with Horizontal(classes="row"):
                         yield Label("Batch name")
-                        yield Input(placeholder="e.g. mtg_box_3 (subfolder)", id="batch")
+                        yield Input(placeholder="e.g. mtg_box_3 (subfolder)", id="batch", suggester=BatchSuggester(self))
                     yield Static("", id="resolved-path")
                 with Vertical(classes="section") as v:
                     v.border_title = "Preset"
@@ -244,6 +299,7 @@ class ScanApp(App):
                 with Horizontal(id="actions"):
                     yield Button("Scan (F5)", variant="success", id="scan")
                     yield Button("Stop (Esc)", variant="error", id="stop", disabled=True)
+                    yield Button("Close Batch", id="close-batch")
                     yield Static("", id="scan-status")
                 yield RichLog(id="log", wrap=True, markup=True)
             with VerticalScroll(id="right"):
@@ -467,15 +523,24 @@ class ScanApp(App):
     # ----- output path -----
 
     def output_dir(self) -> Path:
-        base = Path(self.query_one("#save_path", Input).value.strip() or ".").expanduser()
+        base = self.save_base()
         batch = batch_folder_name(self.query_one("#batch", Input).value)
         return base / batch if batch else base
+
+    def save_base(self) -> Path:
+        return Path(self.query_one("#save_path", Input).value.strip() or ".").expanduser()
+
+    def batch_suggestion(self, value: str) -> str | None:
+        return next_free_batch_name(self.save_base(), batch_folder_name(value))
 
     def update_resolved_path(self) -> None:
         out = self.output_dir()
         existing = next_sheet_offset(out)
         note = f"  [$warning](exists — continues after sheet {existing:03d})[/]" if existing else ""
-        self.query_one("#resolved-path", Static).update(Content.from_markup(f"Saves to: $path{note}", path=str(out)))
+        suggestion = self.batch_suggestion(self.query_one("#batch", Input).value)
+        hint = "  [$accent]Next free batch: $next[/]" if suggestion else ""
+        self.query_one("#resolved-path", Static).update(
+            Content.from_markup(f"Saves to: $path{note}{hint}", path=str(out), next=suggestion or ""))
 
     @on(Button.Pressed, "#browse")
     def browse(self) -> None:
@@ -611,10 +676,25 @@ class ScanApp(App):
             self.stop_event.set()
             self.query_one("#scan-status", Static).update("Stopping after the current sheet…")
 
+    @on(Button.Pressed, "#close-batch")
+    def close_batch(self) -> None:
+        """Clear the log and move on to the next batch name (TCGP23 -> TCGP24)."""
+        if self.scanning:
+            return
+        self.query_one("#log", RichLog).clear()
+        self.query_one("#scan-status", Static).update("")
+        batch = self.query_one("#batch", Input)
+        name = batch.value.strip()
+        if name:
+            batch.value = increment_batch_name(name)
+            batch.cursor_position = len(batch.value)
+            self.notify(f"Closed {name}; next batch: {batch.value}", markup=False)
+
     def set_scanning(self, scanning: bool) -> None:
         self.scanning = scanning
         self.query_one("#scan", Button).disabled = scanning
         self.query_one("#stop", Button).disabled = not scanning
+        self.query_one("#close-batch", Button).disabled = scanning
         self.query_one("#find", Button).disabled = scanning
         if scanning:
             self.stop_event.clear()
