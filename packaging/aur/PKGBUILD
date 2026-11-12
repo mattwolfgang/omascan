@@ -1,6 +1,6 @@
 # Maintainer: Matt Wolfgang <mattwolfgang at gmail dot com>
 pkgname=omascan
-pkgver=0.3.1
+pkgver=0.3.2
 pkgrel=1
 pkgdesc="Terminal UI for scanning with the Ricoh/Fujitsu fi-8170 over the network, no vendor driver needed"
 arch=('any')
@@ -9,7 +9,7 @@ license=('MIT')
 depends=('python' 'python-requests' 'python-pillow' 'python-numpy' 'python-opencv' 'python-textual')
 install=omascan.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('430ae507d01b0d451548b4d6e7657d8f77cc5ce9faf8b55f7fd439ce3e668f27')
+sha256sums=('6b8896f2837e363c01676f0f0e2bd49f7408b300c38950bf1ddb5bdff6d4bfcd')
 
 package() {
   cd "$pkgname-$pkgver"
