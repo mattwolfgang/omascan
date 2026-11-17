@@ -1,12 +1,13 @@
 # Maintainer: Matt Wolfgang <mattwolfgang at gmail dot com>
 pkgname=omascan
 pkgver=0.3.2
-pkgrel=1
-pkgdesc="Terminal UI for scanning with the Ricoh/Fujitsu fi-8170 over the network, no vendor driver needed"
+pkgrel=2
+pkgdesc="Terminal UI for scanning with the Ricoh/Fujitsu fi-8170 (USB or network), no vendor driver needed"
 arch=('any')
 url="https://github.com/mattwolfgang/omascan"
 license=('MIT')
-depends=('python' 'python-requests' 'python-pillow' 'python-numpy' 'python-opencv' 'python-textual')
+depends=('python' 'python-requests' 'python-pillow' 'python-numpy' 'python-opencv' 'python-textual'
+        'python-sane' 'sane')
 install=omascan.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('6b8896f2837e363c01676f0f0e2bd49f7408b300c38950bf1ddb5bdff6d4bfcd')
@@ -24,6 +25,19 @@ package() {
   install -Dm755 packaging/omascan-launch "$pkgdir/usr/bin/omascan-launch"
   install -Dm644 packaging/omascan.desktop "$pkgdir/usr/share/applications/omascan.desktop"
   install -Dm644 assets/omascan.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/omascan.svg"
+  # The fi-8170's vendor-specific USB class is not covered by SANE's default
+  # udev rule; packaged installations need this one for USB scanning. The rule
+  # is written inline as a fallback because source archives from before the
+  # rule file existed don't contain it.
+  if [[ -f packaging/50-omascan-ricoh.rules ]]; then
+    install -Dm644 packaging/50-omascan-ricoh.rules "$pkgdir/usr/lib/udev/rules.d/50-omascan-ricoh.rules"
+  else
+    mkdir -p "$pkgdir/usr/lib/udev/rules.d"
+    printf '%s\n%s\n' \
+      '# Ricoh/Fujitsu fi-8170 scanner (vendor-specific USB class, not covered by default SANE rule)' \
+      'SUBSYSTEM=="usb", ATTR{idVendor}=="04c5", ATTR{idProduct}=="15ff", MODE="0660", GROUP="omascan"' \
+      > "$pkgdir/usr/lib/udev/rules.d/50-omascan-ricoh.rules"
+  fi
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Command-line scanner for the Ricoh/Fujitsu fi-8170 over the network.
+"""Command-line scanner for the Ricoh/Fujitsu fi-8170 over USB or the network.
 
 Starts from a preset (Letter by default; built-ins plus any saved in the
 Omascan TUI) and applies any flags given on top of it.
@@ -7,28 +7,35 @@ Omascan TUI) and applies any flags given on top of it.
 Usage:
     omascan scan --output ./scans
     omascan scan --preset "Trading cards (TCG)" --output ./mtg_batch_1
+    python scan.py --transport usb --output ./scans
     python scan.py --host 192.0.2.10 --output ./scans
 """
 
 import argparse
+import signal
 import sys
 from dataclasses import replace
 from pathlib import Path
 
 from config import DEFAULT_PRESET_NAME, AppConfig
-from discovery import find_scanners
+from discovery import find_scanners, find_usb_scanner
 from privet_client import PrivetClient
 from processing import ScanSettings, save_image
+from sane_client import SaneClient, SaneError, usb_scanner_present
 
 ROTATE_ARGS = {"cw": "cw90", "ccw": "ccw90", "180": "180", "none": "none"}
 
 
 def build_parser(presets: list[str]) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--host", help="Scanner IP address. Default: the one remembered by the TUI, "
-                                        "otherwise the local network is searched for an fi-8170.")
+    parser.add_argument("--host", help="Scanner address: an IP (network) or usb:<device name> "
+                                      "(USB). Wins over --transport and the remembered address.")
     parser.add_argument("--port", type=int, default=80)
     parser.add_argument("--output", default="./scans", help="Directory to save scanned JPEGs into")
+    parser.add_argument("--transport", choices=["auto", "usb", "network"], default="auto",
+                        help="How to reach the scanner. 'usb' uses SANE, 'network' the "
+                             "scanner's HTTP protocol. 'auto' (default) prefers a "
+                             "USB-attached scanner and falls back to the network.")
     parser.add_argument("--preset", default=DEFAULT_PRESET_NAME, metavar="NAME",
                         help=f"Preset to start from. Available: {', '.join(presets)}. "
                              f"Default: {DEFAULT_PRESET_NAME}")
@@ -91,7 +98,10 @@ def settings_from_args(base: ScanSettings, args: argparse.Namespace) -> ScanSett
 def resolve_host(args: argparse.Namespace, config: AppConfig) -> str | None:
     if args.host:
         return args.host
-    if config.host:
+    # A remembered "usb:" address is not a network host; fall through to the
+    # search so --transport auto/network can still find a USB-connected scanner
+    # that the TUI was last used on.
+    if config.host and not config.host.startswith("usb:"):
         return config.host
     print("No scanner address given or remembered; searching the local network…")
     found = find_scanners(port=args.port)
@@ -100,6 +110,70 @@ def resolve_host(args: argparse.Namespace, config: AppConfig) -> str | None:
     scanner = found[0]
     print(f"Found {scanner.manufacturer} {scanner.model} at {scanner.host}")
     return scanner.host
+
+
+def resolve_usb(args: argparse.Namespace, config: AppConfig,
+               explicit: str | None = None) -> SaneClient | None:
+    """The USB scanner: an explicitly requested device name, a name remembered
+    from the TUI, or a fresh discovery. Returns None when no usable USB
+    scanner is attached."""
+    name = explicit
+    if name is None:
+        name = config.host.removeprefix("usb:") if config.host.startswith("usb:") else None
+    if not name:
+        if not usb_scanner_present():
+            return None
+        print("USB fi-series scanner attached; waiting for it to answer SANE…")
+        try:
+            scanner = find_usb_scanner()
+        except SaneError as e:
+            print(f"USB scanner unavailable: {e}", file=sys.stderr)
+            return None
+        if scanner is None:
+            return None
+        name = scanner.host
+    try:
+        return SaneClient(name)
+    except SaneError as e:
+        print(f"USB scanner unavailable: {e}", file=sys.stderr)
+        return None
+    except Exception as e:  # noqa: BLE001 - python-sane's C error type
+        print(f"USB scanner unavailable: {e}", file=sys.stderr)
+        return None
+
+
+def resolve_target(args: argparse.Namespace, config: AppConfig) -> tuple[SaneClient | PrivetClient, str] | None:
+    if args.host:
+        # An explicit --host wins over the transport default and the remembered
+        # address; its usb: prefix selects the transport.
+        if args.host.startswith("usb:"):
+            if args.transport == "network":
+                print("--host is a USB device but --transport is network.", file=sys.stderr)
+                return None
+            client = resolve_usb(args, config, args.host.removeprefix("usb:"))
+            return (client, client.device_name) if client else None
+        if args.transport == "usb":
+            print("--host is a network address but --transport is usb.", file=sys.stderr)
+            return None
+        return (PrivetClient(args.host, args.port), args.host)
+    if args.transport == "network":
+        host = resolve_host(args, config)
+        return (PrivetClient(host, args.port), host) if host else None
+    if args.transport == "usb":
+        client = resolve_usb(args, config)
+        return (client, client.device_name) if client else None
+    # auto: USB first when the scanner is physically attached, then the network.
+    if usb_scanner_present():
+        client = resolve_usb(args, config)
+        if client:
+            return client, client.device_name
+        print("USB scanner not ready; trying the network.", file=sys.stderr)
+    host = resolve_host(args, config)
+    return (PrivetClient(host, args.port), host) if host else None
+
+
+def _shutdown(signum, frame) -> None:
+    raise SystemExit(130)
 
 
 def main() -> int:
@@ -116,31 +190,41 @@ def main() -> int:
         return 2
     settings = settings_from_args(presets[args.preset], args)
 
-    host = resolve_host(args, config)
-    if not host:
-        print("No fi-8170 found on the local network. Pass --host <scanner-ip>.", file=sys.stderr)
+    # Raising on a signal unwinds the scan loop, which closes the client's
+    # generator and releases the scanner's session instead of leaving it
+    # orphaned (a SIGTERM'd process would otherwise leave the scanner busy).
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
+
+    target = resolve_target(args, config)
+    if not target:
+        print("No fi-8170 found (USB or network). Pass --host <scanner-ip> or attach it over USB.",
+              file=sys.stderr)
         return 1
+    client, _ = target
 
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    client = PrivetClient(host, args.port)
+    try:
+        info = client.get_info()
+        print(f"Connected to {info.get('manufacturer')} {info.get('model')} "
+              f"(serial {info.get('serialNumber')}, firmware {info.get('firmwareVersion')})")
+        print(f"Preset: {args.preset}")
 
-    info = client.get_info()
-    print(f"Connected to {info.get('manufacturer')} {info.get('model')} "
-          f"(serial {info.get('serialNumber')}, firmware {info.get('firmwareVersion')})")
-    print(f"Preset: {args.preset}")
-
-    count = 0
-    for image in client.scan(
-        resolution=settings.resolution, width=settings.width, height=settings.height,
-        jpeg_quality=settings.jpeg_quality,
-    ):
-        filename = out_dir / f"sheet{image.sheet_number:03d}_{image.source}.jpg"
-        save_image(image, settings, filename)
-        print(f"Saved {filename} ({image.pixel_width}x{image.pixel_height} @ {image.resolution}dpi, "
-              f"{image.size} bytes)")
-        count += 1
+        count = 0
+        for image in client.scan(
+            resolution=settings.resolution, width=settings.width, height=settings.height,
+            jpeg_quality=settings.jpeg_quality,
+        ):
+            filename = out_dir / f"sheet{image.sheet_number:03d}_{image.source}.jpg"
+            save_image(image, settings, filename)
+            print(f"Saved {filename} ({image.pixel_width}x{image.pixel_height} @ {image.resolution}dpi, "
+                  f"{image.size} bytes)")
+            count += 1
+    except Exception as e:  # noqa: BLE001 - scanner/protocol errors go to the console cleanly
+        print(f"Scan failed: {type(e).__name__}: {e}", file=sys.stderr)
+        return 1
 
     print(f"Done. {count} image(s) saved to {out_dir}/")
     return 0

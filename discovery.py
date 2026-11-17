@@ -20,10 +20,11 @@ import requests
 
 @dataclass
 class FoundScanner:
-    host: str
+    host: str  # IP address for network scanners, SANE device name for USB scanners
     manufacturer: str
     model: str
     serial: str
+    transport: str = "network"  # "network" or "usb"
 
     @property
     def is_fi8170(self) -> bool:
@@ -50,7 +51,9 @@ def local_networks() -> list[ipaddress.IPv4Network]:
                 addrs.append(s.getsockname()[0])
             except OSError:
                 pass
-    networks = {ipaddress.ip_network(f"{a}/24", strict=False) for a in addrs}
+    networks: set[ipaddress.IPv4Network] = {
+        ipaddress.IPv4Network(f"{a}/24", strict=False) for a in addrs
+    }
     return sorted(networks)
 
 
@@ -83,3 +86,24 @@ def find_scanners(networks: list[ipaddress.IPv4Network] | None = None, port: int
     found = [r for r in results if r is not None]
     # fi-8170s first, then any other fi-series devices that answered.
     return sorted(found, key=lambda s: (not s.is_fi8170, ipaddress.ip_address(s.host)))
+
+
+def find_usb_scanner() -> FoundScanner | None:
+    """The fi-series scanner attached over USB, or None. Raises SaneError if
+    the SANE stack is broken (missing module, no USB permission)."""
+    from sane_client import find_device, usb_scanner_present
+
+    if not usb_scanner_present():
+        return None
+    result = find_device()
+    if result is None:
+        return None
+    name, brand, model = result
+    parts = name.split(":")
+    return FoundScanner(
+        host=name,
+        manufacturer=brand if brand != "FUJITSU" else "Fujitsu/Ricoh",
+        model=model,
+        serial=parts[-1] if len(parts) > 2 else "",
+        transport="usb",
+    )

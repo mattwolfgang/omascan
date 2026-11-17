@@ -38,8 +38,9 @@ from config import BUILTIN_PRESETS, DEFAULT_PRESET_NAME, TCG_PRESET_NAME, AppCon
 from logo import BANNER, BANNER_WIDTH
 from omarchy_theme import build_theme, theme_name, theme_stamp
 from updater import available_update
-from discovery import FoundScanner, find_scanners, local_networks
+from discovery import FoundScanner, find_scanners, find_usb_scanner, local_networks
 from privet_client import PrivetClient
+from sane_client import SaneClient, SaneError
 from processing import ROTATION_LABELS, UNITS_PER_INCH, ScanSettings, next_sheet_offset, save_image
 
 RESOLUTIONS = [150, 200, 240, 300, 400, 600]
@@ -155,7 +156,7 @@ class PresetNameScreen(ModalScreen[str | None]):
         self.dismiss(None)
 
 
-class ScannerPickScreen(ModalScreen[str | None]):
+class ScannerPickScreen(ModalScreen[FoundScanner | None]):
     def __init__(self, scanners: list[FoundScanner]) -> None:
         super().__init__()
         self.scanners = scanners
@@ -164,7 +165,9 @@ class ScannerPickScreen(ModalScreen[str | None]):
         with Vertical(classes="dialog"):
             yield Label("Scanners found — pick one:")
             yield ListView(
-                *[ListItem(Label(Content(f"{s.host}  {s.manufacturer} {s.model}  (serial {s.serial})"))) for s in self.scanners],
+                *[ListItem(Label(Content(
+                    f"{'via USB' if s.transport == 'usb' else s.host}  {s.manufacturer} {s.model}  (serial {s.serial})"
+                ))) for s in self.scanners],
                 id="scanner-list",
             )
             with Horizontal(classes="buttons"):
@@ -172,7 +175,7 @@ class ScannerPickScreen(ModalScreen[str | None]):
 
     @on(ListView.Selected)
     def picked(self, event: ListView.Selected) -> None:
-        self.dismiss(self.scanners[event.list_view.index].host)
+        self.dismiss(self.scanners[event.list_view.index])
 
     @on(Button.Pressed, "#cancel")
     def cancel(self) -> None:
@@ -259,20 +262,22 @@ class ScanApp(App):
         self.config = AppConfig.load()
         self.stop_event = threading.Event()
         self.scanning = False
+        self.discovering = False
+        self._active_client = None
         self._loading = False
 
     # ----- layout -----
 
     def compose(self) -> ComposeResult:
         yield Static(BANNER, id="banner")
-        yield Static("network scanning for the Ricoh/Fujitsu fi-8170", id="banner-subtitle")
+        yield Static("scanning with the Ricoh/Fujitsu fi-8170 (USB or network)", id="banner-subtitle")
         yield Static("OMASCAN", id="title-compact")
         with Horizontal(id="main"):
             with VerticalScroll(id="left"):
                 with Vertical(classes="section") as v:
                     v.border_title = "Scanner"
                     with Horizontal(classes="row"):
-                        yield Label("IP address")
+                        yield Label("Address")
                         yield Input(self.config.host, id="host")
                         yield Button("Find", id="find")
                     yield Static("", id="scanner-status")
@@ -612,8 +617,12 @@ class ScanApp(App):
 
     @on(Button.Pressed, "#find")
     def action_find_scanner(self) -> None:
-        if self.scanning:
+        # A second discovery would run a second SANE pass in a separate thread
+        # (cancelled workers still run to completion); the SANE C library is
+        # not thread-safe, so refuse to overlap.
+        if self.scanning or self.discovering:
             return
+        self.discovering = True
         self.query_one("#find", Button).disabled = True
         nets = ", ".join(str(n) for n in local_networks()) or "no networks found"
         self.query_one("#scanner-status", Static).update(f"Searching {nets}…")
@@ -621,33 +630,48 @@ class ScanApp(App):
 
     @work(thread=True, exclusive=True, group="discover")
     def discover(self) -> None:
+        found: list[FoundScanner] = []
+        error = None
         try:
             found = find_scanners()
         except Exception as e:  # noqa: BLE001 - surface anything to the user
-            self.call_from_thread(self.discovery_done, [], str(e))
-            return
-        self.call_from_thread(self.discovery_done, found, None)
+            error = str(e)
+        usb_error = None
+        try:
+            usb = find_usb_scanner()
+            if usb:
+                found.insert(0, usb)
+        except Exception as e:  # noqa: BLE001 - surface anything to the user
+            usb_error = str(e)
+        self.call_from_thread(self.discovery_done, found, error, usb_error)
 
-    def discovery_done(self, found: list[FoundScanner], error: str | None) -> None:
+    def discovery_done(self, found: list[FoundScanner], error: str | None, usb_error: str | None) -> None:
+        self.discovering = False
         self.query_one("#find", Button).disabled = False
         status = self.query_one("#scanner-status", Static)
-        if error:
+        if error and not found:
             status.update(Content.from_markup("[$error]Search failed: $error_text[/]", error_text=error))
+        elif usb_error and not found:
+            status.update(Content.from_markup("[$error]USB scanner unavailable: $error_text[/]", error_text=usb_error))
         elif not found:
-            status.update("[$error]No fi-series scanner found on the local network.[/]")
+            status.update("[$error]No fi-series scanner found (network or USB).[/]")
         elif len(found) == 1:
-            self.use_scanner(found[0].host, found[0])
+            self.use_scanner(found[0])
         else:
             status.update(f"Found {len(found)} scanners.")
             self.push_screen(ScannerPickScreen(found), self.use_scanner)
 
-    def use_scanner(self, host: str | None, scanner: FoundScanner | None = None) -> None:
-        if not host:
+    def use_scanner(self, scanner: FoundScanner | None) -> None:
+        if not scanner:
             return
-        self.query_one("#host", Input).value = host
-        desc = f"{scanner.manufacturer} {scanner.model} (serial {scanner.serial})" if scanner else "selected"
+        # USB scanners are addressed by SANE device name, prefixed so the value
+        # round-trips through the remembered address (and the CLI).
+        address = f"usb:{scanner.host}" if scanner.transport == "usb" else scanner.host
+        self.query_one("#host", Input).value = address
+        desc = f"{scanner.manufacturer} {scanner.model} (serial {scanner.serial})"
+        where = "over USB" if scanner.transport == "usb" else f"at {scanner.host}"
         self.query_one("#scanner-status", Static).update(
-            Content.from_markup("[$success]Found $desc at $host[/]", desc=desc, host=host))
+            Content.from_markup("[$success]Found $desc $where[/]", desc=desc, where=where))
         self.save_config()
 
     # ----- scanning -----
@@ -663,7 +687,7 @@ class ScanApp(App):
             return
         host = self.query_one("#host", Input).value.strip()
         if not host:
-            self.notify("Enter the scanner's IP address (or press Find)", severity="error")
+            self.notify("Enter the scanner's address (or press Find)", severity="error")
             return
         out_dir = self.output_dir()
         self.save_config()
@@ -674,6 +698,10 @@ class ScanApp(App):
     def action_stop_scan(self) -> None:
         if self.scanning:
             self.stop_event.set()
+            # A USB scan whose frame read is hung can only end via this hook.
+            stop = getattr(self._active_client, "stop", None)
+            if stop:
+                stop()
             self.query_one("#scan-status", Static).update("Stopping after the current sheet…")
 
     @on(Button.Pressed, "#close-batch")
@@ -717,8 +745,9 @@ class ScanApp(App):
         try:
             out_dir.mkdir(parents=True, exist_ok=True)
             offset = next_sheet_offset(out_dir)
-            client = PrivetClient(host)
+            client = SaneClient(host.removeprefix("usb:")) if host.startswith("usb:") else PrivetClient(host)
             status("Connecting…")
+            self._active_client = client
             info = client.get_info()
             log("Connected to $manufacturer $model (serial $serial, firmware $firmware)",
                 manufacturer=str(info.get("manufacturer")), model=str(info.get("model")),
@@ -729,8 +758,10 @@ class ScanApp(App):
             status("Scanning… (feeding sheets)")
             scan = client.scan(resolution=settings.resolution, width=settings.width, height=settings.height,
                                jpeg_quality=settings.jpeg_quality)
+            last_source = None
             try:
                 for image in scan:
+                    last_source = image.source
                     filename = out_dir / f"sheet{image.sheet_number + offset:03d}_{image.source}.jpg"
                     save_image(image, settings, filename)
                     count += 1
@@ -742,8 +773,13 @@ class ScanApp(App):
                         break
             finally:
                 scan.close()  # runs the client's closeSession cleanup if we broke out early
-            log(f"[$success]Done. {count} image(s) saved to $path/[/]", path=str(out_dir))
-            status(f"Done — {count} image(s)")
+                self._active_client = None
+            if self.stop_event.is_set() and last_source == "front":
+                log("[$warning]Stopped by user mid-sheet; the scan was interrupted.[/]")
+                status("Stopped")
+            else:
+                log(f"[$success]Done. {count} image(s) saved to $path/[/]", path=str(out_dir))
+                status(f"Done — {count} image(s)")
         except Exception as e:  # noqa: BLE001 - network/device errors should land in the log, not crash the UI
             log(f"[$error]Scan failed: {type(e).__name__}: $message[/]", message=str(e))
             status("[$error]Scan failed[/]")

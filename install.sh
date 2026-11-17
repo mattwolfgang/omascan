@@ -132,6 +132,65 @@ fi
 "$PREFIX/venv/bin/python" -m pip install --quiet --disable-pip-version-check --upgrade -r "$PREFIX/app/requirements.txt" \
   || die "Installing Python packages failed (see the output above)."
 
+# ---- USB support (SANE) -------------------------------------------------------
+
+# python-sane builds against the system SANE library, so it is only installed
+# when that library is present; without it Omascan still works over the network.
+if ! "$PREFIX/venv/bin/python" -c 'import sane' >/dev/null 2>&1; then
+  if ldconfig -p 2>/dev/null | grep -q 'libsane\.so'; then
+    info "Installing USB scanning support (python-sane)…"
+    "$PREFIX/venv/bin/python" -m pip install --quiet --disable-pip-version-check python-sane \
+      || info "Note: python-sane failed to install; USB scanning is disabled. The app still works over the network."
+  else
+    info "Note: the system 'sane' package is missing, so USB scanning is disabled. Install it (e.g. 'sudo pacman -S sane') and re-run the installer."
+  fi
+fi
+
+# The fi-8170 uses a vendor-specific USB class (0xff) that SANE's default udev
+# rule doesn't cover, so grant the user access to the device explicitly. A
+# dedicated group is used instead of the shared 'lp' group so the user isn't
+# given access to every other device 'lp' owns.
+install_udev_rule() {
+  # The dedicated group must exist before the rule is applied, or udev drops
+  # the group assignment on a fresh install.
+  if command -v sudo >/dev/null; then
+    if ! id -nG 2>/dev/null | grep -qw omascan; then
+      sudo groupadd -f omascan >/dev/null 2>&1 || true
+      if sudo usermod -aG omascan "$(id -un)" >/dev/null 2>&1; then
+        info "Added the current user to the 'omascan' group (effective at the next login)"
+      fi
+    fi
+  fi
+  local rule='SUBSYSTEM=="usb", ATTR{idVendor}=="04c5", ATTR{idProduct}=="15ff", MODE="0660", GROUP="omascan"'
+  if [[ -f $SRC/packaging/50-omascan-ricoh.rules ]]; then
+    if [[ -w /etc/udev/rules.d ]]; then
+      cp "$SRC/packaging/50-omascan-ricoh.rules" /etc/udev/rules.d/50-omascan-ricoh.rules
+    elif command -v sudo >/dev/null; then
+      sudo install -Dm644 "$SRC/packaging/50-omascan-ricoh.rules" /etc/udev/rules.d/50-omascan-ricoh.rules
+    else
+      return 0
+    fi
+  elif command -v sudo >/dev/null; then
+    sudo tee /etc/udev/rules.d/50-omascan-ricoh.rules >/dev/null <<EOF
+# Omascan: access to the Ricoh/Fujitsu fi-8170 USB scanner
+$rule
+EOF
+  else
+    return 0
+  fi
+  # Reload with privilege so it works when the user can't write rules.d, and
+  # re-trigger the USB subsystem so an already-connected scanner gets the new
+  # permissions without being replugged.
+  if command -v sudo >/dev/null; then
+    sudo udevadm control --reload-rules >/dev/null 2>&1 || true
+    sudo udevadm trigger --subsystem-match=usb --action=change >/dev/null 2>&1 || true
+  else
+    udevadm control --reload >/dev/null 2>&1 || true
+  fi
+  info "Installed the udev rule for USB scanning"
+}
+install_udev_rule
+
 # ---- the omascan command ------------------------------------------------------
 
 mkdir -p "$BIN_DIR"

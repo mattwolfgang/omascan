@@ -12,11 +12,11 @@
 # Omascan
 
 A Linux terminal app for scanning with a **Ricoh/Fujitsu fi-8170** document
-scanner over the network. No vendor driver, no Windows, no PaperStream.
+scanner, over USB or the network. No vendor driver, no Windows, no PaperStream.
 
 - A full-screen TUI: pick the scanner, save folder, batch name and settings,
   then press **F5** to scan.
-- **Finds the scanner on your network** for you.
+- **Finds the scanner on your network — or over USB** — for you.
 - **Presets** for Letter, Legal, A4 and trading cards (e.g. Magic: The
   Gathering, fed sideways and auto-cropped/straightened), plus your own.
 - Remembers your scanner, save folder and last preset between sessions.
@@ -25,10 +25,12 @@ scanner over the network. No vendor driver, no Windows, no PaperStream.
   launcher and the Omarchy menu. Runs on any Linux with Python 3.10+.
 - A command-line mode (`omascan scan`) for scripting.
 
-The fi-8170 doesn't speak any standard network scanning protocol (no
-eSCL/AirScan, no WSD, no SANE backend over the network). Omascan talks to it
-directly using a proprietary JSON-over-HTTP protocol, reverse-engineered from
-a packet capture of the vendor's software. See [How it works](#how-it-works).
+Over the network the fi-8170 doesn't speak any standard scanning protocol
+(no eSCL/AirScan, no WSD), so Omascan talks to it directly using a
+proprietary JSON-over-HTTP protocol, reverse-engineered from a packet
+capture of the vendor's software. Over USB it uses SANE's `fujitsu`
+backend — the driver Ricoh ships for Linux — through the `python-sane`
+bindings. See [How it works](#how-it-works).
 
 ## Install
 
@@ -55,7 +57,16 @@ What the installer does:
   This needs Python 3.10 or newer with the `venv` module (on Debian/Ubuntu,
   `sudo apt install python3-venv`).
 
-Omascan needs the scanner reachable on your network over plain HTTP (port 80).
+Omascan needs the scanner reachable on your network over plain HTTP (port 80),
+or attached over USB. USB support needs the system `sane` package — the
+pacman package pulls it in, and the script installer installs the
+`python-sane` Python module itself when that library is present (a
+network-only install on a system without SANE is unaffected). The fi-8170
+exposes a vendor-specific USB class the default SANE rule misses, so the
+package and the installer ship a udev rule granting access through a
+dedicated `omascan` group (the installer adds you to it; on a packaged
+install elsewhere, `sudo usermod -aG omascan $USER` does). After a fresh
+install, log in again so the group takes effect.
 
 **Uninstall:**
 
@@ -100,8 +111,10 @@ omascan
 ```
 
 1. **Scanner.** On first launch Omascan searches your local network for the
-   fi-8170 and fills in its IP address. Press **Find** (F6) to search again,
-   or type an address.
+   fi-8170 and fills in its IP address; a scanner attached over USB is found
+   too and shows up as "via USB". Press **Find** (F6) to search again, or
+   type an address (an IP, or the `usb:fujitsu:fi-8170:…` name a USB scan
+   fills in).
 2. **Output.** Choose a **save path** (type it or **Browse**) and a **batch
    name**. The batch name becomes a subfolder of the save path. The full
    destination is shown underneath.
@@ -171,13 +184,19 @@ omascan scan --preset "Trading cards (TCG)" --output ./mtg_batch_1
 # A preset you saved in the TUI, at a specific scanner address
 omascan scan --preset "My receipts" --host 192.0.2.10 --output ./receipts
 
+# The scanner attached over USB (default 'auto' finds it on its own)
+omascan scan --transport usb --output ./scans
+
 # List presets
 omascan scan --list-presets
 ```
 
 If you don't pass `--host`, the address remembered by the TUI is used; if
-there isn't one, the local network is searched. The command-line scanner
-overwrites existing files in the output folder (the TUI continues numbering).
+there isn't one, the local network is searched. `--transport` selects how to
+reach the scanner: `auto` (default) uses a USB-attached scanner when one is
+present and falls back to the network, `usb` forces SANE, `network` forces
+the HTTP protocol. The command-line scanner overwrites existing files in the
+output folder (the TUI continues numbering).
 
 From a clone without installing, run `python scan.py` / `python omascan.py`
 after `pip install -r requirements.txt` in a virtualenv.
@@ -187,6 +206,9 @@ after `pip install -r requirements.txt` in a virtualenv.
 
 Options left out take their value from the preset.
 
+- **`--transport {auto,usb,network}`**<br>
+  How to reach the scanner. `auto` (default) uses a USB-attached scanner when
+  one is present, then falls back to the network.
 - **`--host HOST`**<br>
   IP address (or hostname) of the scanner.
 - **`--port PORT`**<br>
@@ -229,11 +251,12 @@ Options left out take their value from the preset.
 | `omascan.py` | The TUI (Textual) |
 | `scan.py` | Command-line scanner |
 | `privet_client.py` | Client for the scanner's network protocol |
+| `sane_client.py` | USB client: runs SANE in a dedicated worker process (`sane_worker.py`) so every blocking call is deadline-bounded and killable |
 | `processing.py` | Scan settings and the post-processing pipeline shared by the TUI and CLI |
 | `autocrop.py` | Content-based crop and deskew (OpenCV/numpy) |
 | `colorcorrect.py` | Brightness correction and gamma/contrast (numpy) |
 | `config.py` | Settings and preset storage, built-in presets |
-| `discovery.py` | Finds fi-series scanners on the local network |
+| `discovery.py` | Finds fi-series scanners on the local network and over USB |
 | `logo.py` | The title banner |
 | `omarchy_theme.py` | Builds the TUI's color theme from the current Omarchy theme |
 | `install.sh`, `uninstall.sh`, `scripts/` | Installer and Omarchy menu integration |
@@ -294,10 +317,14 @@ pre-blur.
 
 ## Status
 
-Tested with the fi-8170. Other fi-series models that use the same network
-protocol may work but haven't been tried. The trading-card preset was
-calibrated against real PaperStream output; the document presets are new and
-may need brightness tweaks for your paper.
+Tested with the fi-8170 over USB (SANE) and the network. Other fi-series
+models that use the same protocol may work but haven't been tried. The
+trading-card preset was calibrated against real PaperStream output; the
+document presets are new and may need brightness tweaks for your paper.
+
+USB note: the fi-8170 negotiates down to USB 1.1 full speed on USB 2.0 hubs,
+which makes transfers slow (tens of seconds per side). For best results plug
+it into a USB 3.x port directly.
 
 ## Making a release
 

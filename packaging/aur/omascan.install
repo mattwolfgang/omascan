@@ -1,10 +1,19 @@
 post_install() {
+  # The udev rule ships with this package; the group it assigns must exist.
+  groupadd -f omascan
+  # Re-apply the rule in case the scanner is already connected.
+  udevadm control --reload-rules 2>/dev/null || true
+  udevadm trigger --subsystem-match=usb --action=change 2>/dev/null || true
+
   echo "Omascan is installed. Run 'omascan' or open it from the app launcher."
+  echo "For USB scanning, add the user to the 'omascan' group: sudo usermod -aG omascan <user>"
   echo "On Omarchy, run 'omascan menu add' (as your user) to add it to the Omarchy menu."
 }
 
 post_upgrade() {
-  :
+  groupadd -f omascan
+  udevadm control --reload-rules 2>/dev/null || true
+  udevadm trigger --subsystem-match=usb --action=change 2>/dev/null || true
 }
 
 pre_remove() {

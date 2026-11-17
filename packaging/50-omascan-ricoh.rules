@@ -1,0 +1,2 @@
+# Ricoh/Fujitsu fi-8170 scanner (vendor-specific USB class, not covered by default SANE rule)
+SUBSYSTEM=="usb", ATTR{idVendor}=="04c5", ATTR{idProduct}=="15ff", MODE="0660", GROUP="omascan"
